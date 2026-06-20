@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { VertexAI } from '@google-cloud/vertexai';
 import { FootprintSchema } from '@/validators/footprint.schema';
 import { calculateTotalFootprint } from '@/lib/carbon-calculator';
 
-// Instantiate the Google Gen AI client using our secure server variable
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Vertex AI using your GCP configuration
+const vertexAI = new VertexAI({
+  project: process.env.GCP_PROJECT_ID || '',
+  location: process.env.GCP_LOCATION || 'us-central1'
+});
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Parse and validate the incoming footprint configuration payload using Zod
+    // 1. Validate input payload
     const body = await req.json();
     const validationResult = FootprintSchema.safeParse(body);
 
@@ -20,10 +23,9 @@ export async function POST(req: NextRequest) {
     }
 
     const userData = validationResult.data;
-    
-    // 2. Generate pure contextual mathematical values for our prompt injection layer
     const calculations = calculateTotalFootprint(userData);
 
+    // 2. Build system context injection prompt
     const systemPrompt = `You are an elite carbon footprint reduction advisor.
 The user's annual carbon footprint is calculated at ${calculations.total} kg CO2e, broken down categorically as:
 - Transport: ${calculations.breakdown.transport} kg CO2e
@@ -43,32 +45,34 @@ You must return your response inside a valid JSON object matching this structure
   ]
 }`;
 
-    // 3. Call the Gemini model using the official SDK configuration syntax
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: systemPrompt,
-      config: {
-        // Enforce structural JSON parsing at the model architecture layer
+    // 3. Get the generative model instance via Vertex AI
+    const generativeModel = vertexAI.getGenerativeModel({
+      model: 'gemini-1.5-flash', // Enterprise stable version identifier on Vertex
+      generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.2,
-      },
+      }
     });
 
-    const responseText = response.text;
+    // 4. Request generation content stream
+    const response = await generativeModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
+    });
+
+    const responseText = response.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    
     if (!responseText) {
-      throw new Error('Gemini model returned an empty generation stream.');
+      throw new Error('Vertex AI model returned an empty generation stream.');
     }
 
-    // 4. Return the structured recommendations directly to the front-end client layer
+    // 5. Return structured response directly to client layer
     const structuredData = JSON.parse(responseText);
     return NextResponse.json(structuredData);
 
   } catch (error) {
-    console.error('API Error: Encountered failure in insights processing:', error);
-    
-    // Safety Fallback: Return a clean, user-friendly error layout while noting rate limits
+    console.error('GCP Vertex AI Error:', error);
     return NextResponse.json(
-      { error: 'Internal system engine processing timeout. Rate limits or key configurations may be checked.' },
+      { error: 'Internal system engine processing failure on Google Cloud Platform.' },
       { status: 500 }
     );
   }

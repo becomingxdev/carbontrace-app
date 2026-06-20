@@ -26,3 +26,9 @@ export const BENCHMARKS = {
   globalAverage: 4800, // kg CO2e/year
   parisTarget: 2000,   // kg CO2e/year
 };
+
+export const clothingPerItem = 14.5;       // kg CO2e/item (industry estimate)
+export const electronicsPerItem = 65.0;    // kg CO2e/item (industry estimate)
+export const wastePerKg = 0.52;            // kg CO2e/kg mixed waste
+export const flightKmPerHour = 800;        // assumed avg ground speed for distance estimation
+export const recyclingMitigationRate = 0.4; // max fraction of waste emissions mitigated by recycling

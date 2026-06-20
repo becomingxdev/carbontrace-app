@@ -1,4 +1,11 @@
-import { EMISSION_FACTORS } from './constants';
+import { 
+  EMISSION_FACTORS,
+  clothingPerItem,
+  electronicsPerItem,
+  wastePerKg,
+  flightKmPerHour,
+  recyclingMitigationRate
+} from './constants';
 import { FootprintInput } from '../validators/footprint.schema';
 
 /**
@@ -10,7 +17,7 @@ export function calculateTransportEmissions(data: FootprintInput['transport']): 
   const carAnnual = data.carKmPerWeek * 52 * EMISSION_FACTORS.transport.carPerKm;
   const busAnnual = data.busKmPerWeek * 52 * EMISSION_FACTORS.transport.busPerKm;
   const trainAnnual = data.trainKmPerWeek * 52 * EMISSION_FACTORS.transport.trainPerKm;
-  const flightAnnual = data.flightHoursPerYear * 800 * EMISSION_FACTORS.transport.flightPerKm; // Assumes ~800 km per flight hour average
+  const flightAnnual = data.flightHoursPerYear * flightKmPerHour * EMISSION_FACTORS.transport.flightPerKm; // Assumes avg ground speed average
 
   return carAnnual + busAnnual + trainAnnual + flightAnnual;
 }
@@ -34,16 +41,16 @@ export function calculateFoodEmissions(data: FootprintInput['food']): number {
 }
 
 export function calculateShoppingEmissions(data: FootprintInput['shopping']): number {
-  const clothesAnnual = data.clothesItemsPerMonth * 12 * 14.5; // ~14.5 kg CO2e per clothing item item baseline
-  const electronicsAnnual = data.electronicsItemsPerYear * 65.0; // ~65.0 kg CO2e per average electronic device item baseline
+  const clothesAnnual = data.clothesItemsPerMonth * 12 * clothingPerItem; // kg CO2e per clothing item baseline
+  const electronicsAnnual = data.electronicsItemsPerYear * electronicsPerItem; // kg CO2e per average electronic device baseline
 
   return clothesAnnual + electronicsAnnual;
 }
 
 export function calculateWasteEmissions(data: FootprintInput['waste']): number {
-  const rawWasteAnnual = data.wasteKgPerWeek * 52 * 0.52; // ~0.52 kg CO2e per kg of mixed waste baseline
-  // Recycling mitigates up to 40% of standard disposal emissions depending on percentage efficiency
-  const reductionFactor = 1 - (data.recyclePercentage / 100) * 0.4; 
+  const rawWasteAnnual = data.wasteKgPerWeek * 52 * wastePerKg; // kg CO2e per kg of mixed waste baseline
+  // Recycling mitigates up to maximum fraction of standard disposal emissions depending on percentage efficiency
+  const reductionFactor = 1 - (data.recyclePercentage / 100) * recyclingMitigationRate; 
 
   return rawWasteAnnual * reductionFactor;
 }

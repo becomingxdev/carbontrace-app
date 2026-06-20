@@ -64,7 +64,7 @@ export default function LandingPage() {
           </div>
           <div className="text-center p-2 space-y-1">
             <div className="text-xl text-cyan-400 font-bold">Gemini Smart</div>
-            <p className="text-xs text-slate-500">Retrieves real-time context action metrics explicitly structured by Google's flagship LLM model.</p>
+            <p className="text-xs text-slate-500">Retrieves real-time context action metrics explicitly structured by {"Google's"} flagship LLM model.</p>
           </div>
         </div>
       </div>
