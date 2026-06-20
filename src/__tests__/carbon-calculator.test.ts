@@ -1,4 +1,7 @@
-import { calculateTotalFootprint as calculateFootprint } from '@/lib/carbon-calculator';
+import {
+  calculateTotalFootprint as calculateFootprint,
+  calculateCommittedSavings,
+} from '@/lib/carbon-calculator';
 
 const zeroInput = {
   transport: { carKmPerWeek: 0, busKmPerWeek: 0, trainKmPerWeek: 0, flightHoursPerYear: 0 },
@@ -75,5 +78,43 @@ describe('calculateFootprint', () => {
     const result = calculateFootprint(typicalInput);
     expect(result.total).toBeGreaterThan(500);
     expect(result.total).toBeLessThan(6000);
+  });
+});
+
+describe('calculateCommittedSavings', () => {
+  const recommendations = [
+    { action: 'Switch to LED bulbs', co2Saved: 150, difficulty: 'Easy' as const },
+    { action: 'Reduce meat consumption', co2Saved: 300, difficulty: 'Medium' as const },
+    { action: 'Use public transport', co2Saved: 600, difficulty: 'Hard' as const },
+  ];
+
+  test('returns zero for empty committed actions', () => {
+    const result = calculateCommittedSavings(recommendations, []);
+    expect(result).toBe(0);
+  });
+
+  test('sums CO2 savings for valid committed actions', () => {
+    const result = calculateCommittedSavings(recommendations, [
+      'Switch to LED bulbs',
+      'Use public transport',
+    ]);
+    expect(result).toBe(750);
+  });
+
+  test('returns zero for unknown actions', () => {
+    const result = calculateCommittedSavings(recommendations, [
+      'Unknown action name',
+      'Another fake action',
+    ]);
+    expect(result).toBe(0);
+  });
+
+  test('sums CO2 savings for mixed valid and invalid/unknown actions', () => {
+    const result = calculateCommittedSavings(recommendations, [
+      'Switch to LED bulbs',
+      'Unknown action name',
+      'Reduce meat consumption',
+    ]);
+    expect(result).toBe(450);
   });
 });
