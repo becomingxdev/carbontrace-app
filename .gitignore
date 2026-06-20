@@ -76,3 +76,5 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+deploy.ps1
