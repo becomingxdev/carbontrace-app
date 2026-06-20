@@ -30,6 +30,9 @@ COPY . .
 # Disable Next.js telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Ensure public dir always exists (it's optional in Next.js but COPY requires it)
+RUN mkdir -p public
+
 # Build with standalone output (set in next.config.mjs)
 RUN npm run build
 
