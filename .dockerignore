@@ -1,0 +1,31 @@
+# Dependencies — reinstalled inside Docker
+node_modules
+
+# Next.js build output — rebuilt inside Docker
+.next
+
+# Git history — not needed in image
+.git
+.gitignore
+
+# Environment files — injected at runtime via Cloud Run secrets / env vars
+.env
+.env.local
+.env.*.local
+
+# Dev / test artifacts
+**/*.test.ts
+**/*.test.tsx
+src/__tests__
+jest.config.ts
+coverage
+
+# Editor / OS
+.DS_Store
+*.log
+Thumbs.db
+.vscode
+.idea
+
+# CI/CD
+cloudbuild.yaml

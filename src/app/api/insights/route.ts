@@ -1,17 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { VertexAI } from '@google-cloud/vertexai';
+import { GoogleGenAI } from '@google/genai';
 import { FootprintSchema } from '@/validators/footprint.schema';
 import { calculateTotalFootprint } from '@/lib/carbon-calculator';
 
-// Initialize Vertex AI using your GCP configuration
-const vertexAI = new VertexAI({
-  project: process.env.GCP_PROJECT_ID || '',
-  location: process.env.GCP_LOCATION || 'us-central1'
-});
+// ---------------------------------------------------------------------------
+// Rate limiting — in-memory, per-IP, 10 req/min
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
 
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitStore.get(ip);
+
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.set(ip, { count: 1, windowStart: now });
+    return true; // within limit
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false; // exceeded
+  }
+
+  entry.count += 1;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Gemini 2.5 Flash via Google Gen AI SDK (Vertex AI backend)
+// Lazy-initialized inside the handler so Next.js build does not attempt
+// credential validation during static page collection.
+// On Cloud Run, ADC authenticates via the attached service account.
+// ---------------------------------------------------------------------------
+let _ai: GoogleGenAI | null = null;
+
+function getAIClient(): GoogleGenAI {
+  if (!_ai) {
+    _ai = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GCP_PROJECT_ID || '',
+      location: process.env.GCP_LOCATION || 'us-central1',
+    });
+  }
+  return _ai;
+}
+
+// ---------------------------------------------------------------------------
+// Safe JSON extraction — strips markdown fences if present
+// ---------------------------------------------------------------------------
+function parseAIResponse(raw: string): unknown {
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const cleaned = fenceMatch ? fenceMatch[1].trim() : raw.trim();
+  return JSON.parse(cleaned);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/insights
+// ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  // 1. Rate limiting
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    req.headers.get('x-real-ip') ??
+    'unknown';
+
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
-    // 1. Validate input payload
+    // 2. Validate input payload with Zod
     const body = await req.json();
     const validationResult = FootprintSchema.safeParse(body);
 
@@ -25,7 +90,7 @@ export async function POST(req: NextRequest) {
     const userData = validationResult.data;
     const calculations = calculateTotalFootprint(userData);
 
-    // 2. Build system context injection prompt
+    // 3. Context-injection prompt — user's exact numbers, not generic advice
     const systemPrompt = `You are an elite carbon footprint reduction advisor.
 The user's annual carbon footprint is calculated at ${calculations.total} kg CO2e, broken down categorically as:
 - Transport: ${calculations.breakdown.transport} kg CO2e
@@ -45,34 +110,30 @@ You must return your response inside a valid JSON object matching this structure
   ]
 }`;
 
-    // 3. Get the generative model instance via Vertex AI
-    const generativeModel = vertexAI.getGenerativeModel({
-      model: 'gemini-1.5-flash', // Enterprise stable version identifier on Vertex
-      generationConfig: {
+    // 4. Call Gemini 2.5 Flash
+    const response = await getAIClient().models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+      config: {
         responseMimeType: 'application/json',
         temperature: 0.2,
-      }
+      },
     });
 
-    // 4. Request generation content stream
-    const response = await generativeModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
-    });
+    const responseText = response.text;
 
-    const responseText = response.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-    
     if (!responseText) {
-      throw new Error('Vertex AI model returned an empty generation stream.');
+      throw new Error('Gemini returned an empty response.');
     }
 
-    // 5. Return structured response directly to client layer
-    const structuredData = JSON.parse(responseText);
+    // 5. Safe JSON parse (handles markdown fences from model)
+    const structuredData = parseAIResponse(responseText);
     return NextResponse.json(structuredData);
 
   } catch (error) {
-    console.error('GCP Vertex AI Error:', error);
+    console.error('Gemini API Error:', error);
     return NextResponse.json(
-      { error: 'Internal system engine processing failure on Google Cloud Platform.' },
+      { error: 'Internal system engine processing failure.' },
       { status: 500 }
     );
   }
