@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
+import { Input } from '@/components/ui/Input';
+import { parseNumericInput } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['waste'];
@@ -9,9 +11,8 @@ interface StepProps {
 }
 
 export const WasteStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleInputChange = (field: keyof FootprintInput['waste'], value: string) => {
-    const numValue = Math.max(0, parseFloat(value) || 0);
-    onChange({ ...data, [field]: numValue });
+  const handleChange = (field: keyof FootprintInput['waste']) => (value: string) => {
+    onChange({ ...data, [field]: parseNumericInput(value) });
   };
 
   return (
@@ -22,32 +23,23 @@ export const WasteStep: React.FC<StepProps> = ({ data, onChange }) => {
       </div>
 
       <div className="space-y-4">
-        <div>
-          <label htmlFor="wasteMass" className="block text-sm font-medium text-slate-200">Total Household Waste Generated (kg/week)</label>
-          <input
-            id="wasteMass"
-            type="number"
-            min="0"
-            value={data.wasteKgPerWeek || ''}
-            onChange={(e) => handleInputChange('wasteKgPerWeek', e.target.value)}
-            className="mt-1 w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="0"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="recycleRate" className="block text-sm font-medium text-slate-200">Recycling Allocation Efficiency (%)</label>
-          <input
-            id="recycleRate"
-            type="number"
-            min="0"
-            max="100"
-            value={data.recyclePercentage || ''}
-            onChange={(e) => handleInputChange('recyclePercentage', e.target.value)}
-            className="mt-1 w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            placeholder="0"
-          />
-        </div>
+        <Input
+          id="wasteMass"
+          label="Total Household Waste Generated (kg/week)"
+          type="number"
+          min="0"
+          value={data.wasteKgPerWeek || ''}
+          onChange={(e) => handleChange('wasteKgPerWeek')(e.target.value)}
+        />
+        <Input
+          id="recycleRate"
+          label="Recycling Allocation Efficiency (%)"
+          type="number"
+          min="0"
+          max="100"
+          value={data.recyclePercentage || ''}
+          onChange={(e) => handleChange('recyclePercentage')(e.target.value)}
+        />
       </div>
     </div>
   );

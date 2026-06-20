@@ -7,6 +7,7 @@ import {
   recyclingMitigationRate
 } from './constants';
 import { FootprintInput } from '../validators/footprint.schema';
+import type { Recommendation } from '../types/insights';
 
 /**
  * Calculates annual carbon footprint in kg CO2e based on user inputs.
@@ -78,3 +79,16 @@ export function calculateTotalFootprint(data: FootprintInput) {
     },
   };
 }
+
+/**
+ * Sums the projected CO2e savings for all recommendations that the user has committed to.
+ * Extracted from ActionsPage so this business logic is independently testable.
+ */
+export function calculateCommittedSavings(
+  recommendations: Recommendation[],
+  committedActions: string[]
+): number {
+  return recommendations
+    .filter((item) => committedActions.includes(item.action))
+    .reduce((sum, item) => sum + item.co2Saved, 0);
+}

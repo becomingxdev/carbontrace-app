@@ -1,8 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext } from 'react';
 import { FootprintInput } from '../validators/footprint.schema';
 import { calculateTotalFootprint } from '../lib/carbon-calculator';
+import type { InsightsResponse } from '../types/insights';
+import type { CalculationResult } from '../types/footprint';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { STORAGE_KEYS } from '../constants/storage-keys';
 
 // Initialize a clean default state matching our schema shape
 const defaultInput: FootprintInput = {
@@ -13,18 +17,10 @@ const defaultInput: FootprintInput = {
   waste: { wasteKgPerWeek: 0, recyclePercentage: 0 }
 };
 
-interface InsightsResponse {
-  recommendations: Array<{
-    action: string;
-    co2Saved: number;
-    difficulty: 'Easy' | 'Medium' | 'Hard';
-  }>;
-}
-
 interface FootprintContextType {
   inputs: FootprintInput;
   updateCategory: <K extends keyof FootprintInput>(category: K, data: FootprintInput[K]) => void;
-  calculations: ReturnType<typeof calculateTotalFootprint>;
+  calculations: CalculationResult;
   aiInsights: InsightsResponse | null;
   setAiInsights: (insights: InsightsResponse) => void;
   committedActions: string[];
@@ -35,51 +31,29 @@ interface FootprintContextType {
 const FootprintContext = createContext<FootprintContextType | undefined>(undefined);
 
 export function FootprintProvider({ children }: { children: React.ReactNode }) {
-  const [inputs, setInputs] = useState<FootprintInput>(defaultInput);
-  const [aiInsights, setAiInsightsState] = useState<InsightsResponse | null>(null);
-  const [committedActions, setCommittedActions] = useState<string[]>([]);
-
-  // Hydrate data from localStorage safely on client mount
-  useEffect(() => {
-    const savedInputs = localStorage.getItem('carbontrace_inputs');
-    const savedInsights = localStorage.getItem('carbontrace_insights');
-    const savedActions = localStorage.getItem('carbontrace_committed');
-
-    if (savedInputs) setInputs(JSON.parse(savedInputs));
-    if (savedInsights) setAiInsightsState(JSON.parse(savedInsights));
-    if (savedActions) setCommittedActions(JSON.parse(savedActions));
-  }, []);
+  const [inputs, setInputs] = useLocalStorage<FootprintInput>(STORAGE_KEYS.inputs, defaultInput);
+  const [aiInsights, setAiInsightsStored] = useLocalStorage<InsightsResponse | null>(STORAGE_KEYS.insights, null);
+  const [committedActions, setCommittedActionsStored] = useLocalStorage<string[]>(STORAGE_KEYS.committed, []);
 
   const updateCategory = <K extends keyof FootprintInput>(category: K, data: FootprintInput[K]) => {
-    setInputs((prev) => {
-      const updated = { ...prev, [category]: data };
-      localStorage.setItem('carbontrace_inputs', JSON.stringify(updated));
-      return updated;
-    });
+    setInputs({ ...inputs, [category]: data });
   };
 
   const setAiInsights = (insights: InsightsResponse) => {
-    setAiInsightsState(insights);
-    localStorage.setItem('carbontrace_insights', JSON.stringify(insights));
+    setAiInsightsStored(insights);
   };
 
   const toggleActionCommit = (actionName: string) => {
-    setCommittedActions((prev) => {
-      const updated = prev.includes(actionName)
-        ? prev.filter((a) => a !== actionName)
-        : [...prev, actionName];
-      localStorage.setItem('carbontrace_committed', JSON.stringify(updated));
-      return updated;
-    });
+    const updated = committedActions.includes(actionName)
+      ? committedActions.filter((a) => a !== actionName)
+      : [...committedActions, actionName];
+    setCommittedActionsStored(updated);
   };
 
   const clearAllData = () => {
-    setInputs(defaultInput);
-    setAiInsightsState(null);
-    setCommittedActions([]);
-    localStorage.removeItem('carbontrace_inputs');
-    localStorage.removeItem('carbontrace_insights');
-    localStorage.removeItem('carbontrace_committed');
+    setInputs(null);
+    setAiInsightsStored(null);
+    setCommittedActionsStored(null);
   };
 
   // Derive calculations instantly whenever inputs mutate

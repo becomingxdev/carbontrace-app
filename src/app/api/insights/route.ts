@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { FootprintSchema } from '@/validators/footprint.schema';
 import { calculateTotalFootprint } from '@/lib/carbon-calculator';
+import type { InsightsResponse } from '@/types/insights';
 
 // ---------------------------------------------------------------------------
 // Rate limiting — in-memory, per-IP, 10 req/min
@@ -16,8 +17,20 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
+/**
+ * Checks whether the given IP is within the allowed request window.
+ * Also purges stale entries from the Map to prevent unbounded memory growth.
+ */
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // R8: Sweep expired entries to prevent indefinite Map growth
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+      rateLimitStore.delete(key);
+    }
+  }
+
   const entry = rateLimitStore.get(ip);
 
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
@@ -55,10 +68,10 @@ function getAIClient(): GoogleGenAI {
 // ---------------------------------------------------------------------------
 // Safe JSON extraction — strips markdown fences if present
 // ---------------------------------------------------------------------------
-function parseAIResponse(raw: string): unknown {
+function parseAIResponse(raw: string): InsightsResponse {
   const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   const cleaned = fenceMatch ? fenceMatch[1].trim() : raw.trim();
-  return JSON.parse(cleaned);
+  return JSON.parse(cleaned) as InsightsResponse;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 2. Validate input payload with Zod
-    const body = await req.json();
+    const body: unknown = await req.json();
     const validationResult = FootprintSchema.safeParse(body);
 
     if (!validationResult.success) {
@@ -126,8 +139,8 @@ You must return your response inside a valid JSON object matching this structure
       throw new Error('Gemini returned an empty response.');
     }
 
-    // 5. Safe JSON parse (handles markdown fences from model)
-    const structuredData = parseAIResponse(responseText);
+    // 5. Safe JSON parse with typed return (R9)
+    const structuredData: InsightsResponse = parseAIResponse(responseText);
     return NextResponse.json(structuredData);
 
   } catch (error) {

@@ -1,52 +1,28 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useFootprint } from '@/context/FootprintContext';
 import { Button } from '@/components/ui/Button';
 import { InsightCard } from '@/components/actions/InsightCard';
 import { ActionTracker } from '@/components/actions/ActionTracker';
+import { useCarbonInsights } from '@/hooks/useCarbonInsights';
+import { calculateCommittedSavings } from '@/lib/carbon-calculator';
 
 export default function ActionsPage() {
   const { inputs, calculations, aiInsights, setAiInsights, committedActions, toggleActionCommit } = useFootprint();
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    // If no data exists, do not fire an empty request configuration
-    if (calculations.total === 0 || aiInsights) return;
+  const { loading, error } = useCarbonInsights({
+    inputs,
+    totalFootprint: calculations.total,
+    existingInsights: aiInsights,
+    onSuccess: setAiInsights,
+  });
 
-    const fetchRecommendations = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch('/api/insights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(inputs),
-        });
-
-        if (!res.ok) {
-          throw new Error('Failed to retrieve server insights response.');
-        }
-
-        const data = await res.json();
-        setAiInsights(data);
-      } catch (err) {
-        console.error(err);
-        setError('Could not process reduction recommendations. Verify your API deployment setup.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRecommendations();
-  }, [calculations.total, inputs, aiInsights, setAiInsights]);
-
-  // Compute live cumulative offset savings
-  const totalOffsetSaved = aiInsights?.recommendations
-    .filter((item) => committedActions.includes(item.action))
-    .reduce((sum, item) => sum + item.co2Saved, 0) || 0;
+  // Derive cumulative offset savings from the domain utility
+  const totalOffsetSaved = aiInsights
+    ? calculateCommittedSavings(aiInsights.recommendations, committedActions)
+    : 0;
 
   return (
     <div className="py-10 px-4 max-w-4xl mx-auto flex-grow w-full space-y-8">

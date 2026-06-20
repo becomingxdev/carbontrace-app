@@ -2,16 +2,26 @@
 
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
+import { Input } from '@/components/ui/Input';
+import { parseNumericInput } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['food'];
   onChange: (data: FootprintInput['food']) => void;
 }
 
+// R6: Declared outside the component to prevent recreation on every render pass.
+const FOOD_LABEL_MAP: Record<keyof FootprintInput['food'], string> = {
+  beefKgPerWeek: 'Beef Consumption (kg/week)',
+  chickenKgPerWeek: 'Poultry / Chicken (kg/week)',
+  dairyKgPerWeek: 'Dairy Products (kg/week)',
+  vegetablesKgPerWeek: 'Vegetables & Grains (kg/week)',
+  processedFoodKgPerWeek: 'Packaged / Processed Food (kg/week)',
+};
+
 export const FoodStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleInputChange = (field: keyof FootprintInput['food'], value: string) => {
-    const numValue = Math.max(0, parseFloat(value) || 0);
-    onChange({ ...data, [field]: numValue });
+  const handleChange = (field: keyof FootprintInput['food']) => (value: string) => {
+    onChange({ ...data, [field]: parseNumericInput(value) });
   };
 
   return (
@@ -22,33 +32,17 @@ export const FoodStep: React.FC<StepProps> = ({ data, onChange }) => {
       </div>
 
       <div className="space-y-4">
-        {Object.keys(data).map((field) => {
-          const typedField = field as keyof FootprintInput['food'];
-          const labelMapping: Record<keyof FootprintInput['food'], string> = {
-            beefKgPerWeek: 'Beef Consumption (kg/week)',
-            chickenKgPerWeek: 'Poultry / Chicken (kg/week)',
-            dairyKgPerWeek: 'Dairy Products (kg/week)',
-            vegetablesKgPerWeek: 'Vegetables & Grains (kg/week)',
-            processedFoodKgPerWeek: 'Packaged / Processed Food (kg/week)',
-          };
-
-          return (
-            <div key={typedField}>
-              <label htmlFor={typedField} className="block text-sm font-medium text-slate-200">
-                {labelMapping[typedField]}
-              </label>
-              <input
-                id={typedField}
-                type="number"
-                min="0"
-                value={data[typedField] || ''}
-                onChange={(e) => handleInputChange(typedField, e.target.value)}
-                className="mt-1 w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="0"
-              />
-            </div>
-          );
-        })}
+        {(Object.keys(FOOD_LABEL_MAP) as Array<keyof FootprintInput['food']>).map((field) => (
+          <Input
+            key={field}
+            id={field}
+            label={FOOD_LABEL_MAP[field]}
+            type="number"
+            min="0"
+            value={data[field] || ''}
+            onChange={(e) => handleChange(field)(e.target.value)}
+          />
+        ))}
       </div>
     </div>
   );
