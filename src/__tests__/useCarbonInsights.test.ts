@@ -5,6 +5,14 @@
 import { renderHook, act } from '@testing-library/react';
 import { useCarbonInsights } from '@/hooks/useCarbonInsights';
 
+jest.mock('@/lib/logger', () => ({
+  logger: {
+    error: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+  },
+}));
+
 describe('useCarbonInsights', () => {
   const mockInputs = {
     transport: { carKmPerWeek: 10, busKmPerWeek: 0, trainKmPerWeek: 0, flightHoursPerYear: 0 },
@@ -22,7 +30,6 @@ describe('useCarbonInsights', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Setup a clean spy/mock for fetch
     global.fetch = jest.fn();
   });
 
@@ -66,16 +73,15 @@ describe('useCarbonInsights', () => {
 
   test('orchestrates successful API calls and loading state transitions', async () => {
     const mockOnSuccess = jest.fn();
-    let resolveResponse: (value: any) => void = () => {};
+    let resolveResponse: (value: unknown) => void = () => {};
     
-    // Create a controllable promise to capture loading state midway
     const responsePromise = new Promise((resolve) => {
       resolveResponse = resolve;
     });
 
     (global.fetch as jest.Mock).mockReturnValue(responsePromise);
 
-    const { result, rerender } = renderHook(() =>
+    const { result } = renderHook(() =>
       useCarbonInsights({
         inputs: mockInputs,
         totalFootprint: 500,
@@ -84,22 +90,18 @@ describe('useCarbonInsights', () => {
       })
     );
 
-    // Assert fetch was called and loading state goes true
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
 
-    // Resolve the API call
     await act(async () => {
       resolveResponse({
         ok: true,
         json: async () => mockSuccessData,
       });
-      // Wait for all microtasks to settle
       await responsePromise;
     });
 
-    // Check post-resolve state
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
     expect(mockOnSuccess).toHaveBeenCalledWith(mockSuccessData);
@@ -112,9 +114,6 @@ describe('useCarbonInsights', () => {
       status: 500,
     });
 
-    // Prevent console.error clutter in test runs
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
     const { result } = renderHook(() =>
       useCarbonInsights({
         inputs: mockInputs,
@@ -124,9 +123,8 @@ describe('useCarbonInsights', () => {
       })
     );
 
-    // Wait for async fetch to finish and set state
     await act(async () => {
-      await Promise.resolve(); // flush microtasks
+      await Promise.resolve();
     });
 
     expect(result.current.loading).toBe(false);
@@ -134,6 +132,35 @@ describe('useCarbonInsights', () => {
       'Could not process reduction recommendations. Verify your API deployment setup.'
     );
     expect(mockOnSuccess).not.toHaveBeenCalled();
-    consoleSpy.mockRestore();
+  });
+
+  test('refreshInsights triggers a new fetch request', async () => {
+    const mockOnSuccess = jest.fn();
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => mockSuccessData,
+    });
+
+    const { result } = renderHook(() =>
+      useCarbonInsights({
+        inputs: mockInputs,
+        totalFootprint: 500,
+        existingInsights: mockSuccessData,
+        onSuccess: mockOnSuccess,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      result.current.refreshInsights();
+      await Promise.resolve();
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

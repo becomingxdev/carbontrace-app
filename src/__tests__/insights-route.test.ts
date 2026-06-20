@@ -42,6 +42,12 @@ describe('POST /api/insights', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGenerateContent.mockReset();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   const createMockRequest = (body: any, ip = '127.0.0.1') => {
@@ -75,6 +81,22 @@ describe('POST /api/insights', () => {
     const data = await response.json();
     expect(data).toEqual(mockGeminiResponse);
     expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns fallback recommendations when AI payload fails validation', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      text: JSON.stringify({
+        recommendations: [{ action: 'Bad action', co2Saved: -5, difficulty: 'Very Hard' }],
+      }),
+    });
+
+    const req = createMockRequest(validInputs, 'ip-invalid-ai');
+    const response = (await POST(req)) as any;
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.recommendations.length).toBeGreaterThan(0);
+    expect(data.recommendations[0].difficulty).toMatch(/Easy|Medium|Hard/);
   });
 
   test('correctly parses markdown-wrapped JSON response from Gemini', async () => {
@@ -116,9 +138,10 @@ describe('POST /api/insights', () => {
 
   test('returns 429 status when rate limit is exceeded', async () => {
     const ip = '1.2.3.4';
-    // The rate limit max is 10, so send 10 valid requests
     mockGenerateContent.mockResolvedValue({
-      text: JSON.stringify({ recommendations: [] }),
+      text: JSON.stringify({
+        recommendations: [{ action: 'Use LED bulbs', co2Saved: 50, difficulty: 'Easy' }],
+      }),
     });
 
     for (let i = 0; i < 10; i++) {
@@ -137,10 +160,12 @@ describe('POST /api/insights', () => {
   });
 
   test('returns 500 status when the GoogleGenAI SDK fails', async () => {
-    mockGenerateContent.mockRejectedValueOnce(new Error('SDK Connection Timeout'));
+    mockGenerateContent.mockRejectedValue(new Error('SDK Connection Timeout'));
 
     const req = createMockRequest(validInputs, 'ip-failure-5');
-    const response = (await POST(req)) as any;
+    const responsePromise = POST(req);
+    await jest.runAllTimersAsync();
+    const response = (await responsePromise) as any;
 
     expect(response.status).toBe(500);
     const data = await response.json();
@@ -148,12 +173,14 @@ describe('POST /api/insights', () => {
   });
 
   test('returns 500 status when Gemini returns an empty response text', async () => {
-    mockGenerateContent.mockResolvedValueOnce({
+    mockGenerateContent.mockResolvedValue({
       text: '',
     });
 
     const req = createMockRequest(validInputs, 'ip-empty-text');
-    const response = (await POST(req)) as any;
+    const responsePromise = POST(req);
+    await jest.runAllTimersAsync();
+    const response = (await responsePromise) as any;
 
     expect(response.status).toBe(500);
     const data = await response.json();
@@ -167,16 +194,19 @@ describe('POST /api/insights', () => {
     // First request at time = 1000
     dateSpy.mockReturnValue(1000);
     mockGenerateContent.mockResolvedValueOnce({
-      text: JSON.stringify({ recommendations: [] }),
+      text: JSON.stringify({
+        recommendations: [{ action: 'Use LED bulbs', co2Saved: 50, difficulty: 'Easy' }],
+      }),
     });
     let req = createMockRequest(validInputs, ip);
     let res = (await POST(req)) as any;
     expect(res.status).toBe(200);
 
-    // Advance time past 60000ms window (time = 62000)
     dateSpy.mockReturnValue(62000);
     mockGenerateContent.mockResolvedValueOnce({
-      text: JSON.stringify({ recommendations: [] }),
+      text: JSON.stringify({
+        recommendations: [{ action: 'Use LED bulbs', co2Saved: 50, difficulty: 'Easy' }],
+      }),
     });
     // This request triggers the sweep check which deletes the expired entry
     req = createMockRequest(validInputs, 'another-ip-to-trigger-sweep');

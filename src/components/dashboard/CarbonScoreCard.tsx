@@ -14,7 +14,7 @@ export const CarbonScoreCard: React.FC<ScoreCardProps> = ({ total }) => {
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 flex flex-col justify-between shadow-md">
       <div>
-        <h3 className="text-sm font-medium text-slate-400 tracking-wider uppercase">Your Annual Footprint</h3>
+        <h2 className="text-sm font-medium text-slate-400 tracking-wider uppercase">Your Annual Footprint</h2>
         <div className="mt-4 flex items-baseline">
           <span className="text-5xl font-extrabold text-white tracking-tight">{total.toLocaleString()}</span>
           <span className="text-sm font-medium text-slate-400 ml-2">kg CO2e / yr</span>

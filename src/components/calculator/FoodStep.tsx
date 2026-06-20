@@ -3,14 +3,13 @@
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
 import { Input } from '@/components/ui/Input';
-import { parseNumericInput } from '@/lib/input-utils';
+import { createFieldChangeHandler } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['food'];
   onChange: (data: FootprintInput['food']) => void;
 }
 
-// R6: Declared outside the component to prevent recreation on every render pass.
 const FOOD_LABEL_MAP: Record<keyof FootprintInput['food'], string> = {
   beefKgPerWeek: 'Beef Consumption (kg/week)',
   chickenKgPerWeek: 'Poultry / Chicken (kg/week)',
@@ -19,11 +18,15 @@ const FOOD_LABEL_MAP: Record<keyof FootprintInput['food'], string> = {
   processedFoodKgPerWeek: 'Packaged / Processed Food (kg/week)',
 };
 
-export const FoodStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleChange = (field: keyof FootprintInput['food']) => (value: string) => {
-    onChange({ ...data, [field]: parseNumericInput(value) });
-  };
+const FOOD_HELP_MAP: Record<keyof FootprintInput['food'], string> = {
+  beefKgPerWeek: 'Estimate weekly beef consumption in kilograms.',
+  chickenKgPerWeek: 'Include all poultry products consumed weekly.',
+  dairyKgPerWeek: 'Milk, cheese, yogurt, and other dairy items.',
+  vegetablesKgPerWeek: 'Fresh produce, grains, and plant-based foods.',
+  processedFoodKgPerWeek: 'Packaged snacks, ready meals, and processed items.',
+};
 
+export const FoodStep: React.FC<StepProps> = ({ data, onChange }) => {
   return (
     <div className="space-y-6">
       <div>
@@ -40,7 +43,9 @@ export const FoodStep: React.FC<StepProps> = ({ data, onChange }) => {
             type="number"
             min="0"
             value={data[field] || ''}
-            onChange={(e) => handleChange(field)(e.target.value)}
+            onChange={(e) => createFieldChangeHandler(field, data, onChange)(e.target.value)}
+            helperText={FOOD_HELP_MAP[field]}
+            helperId={`${field}-help`}
           />
         ))}
       </div>

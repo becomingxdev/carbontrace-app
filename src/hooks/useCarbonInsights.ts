@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { FootprintInput } from '@/validators/footprint.schema';
 import type { InsightsResponse } from '@/types/insights';
+import { logger } from '@/lib/logger';
 
 interface UseCarbonInsightsOptions {
   inputs: FootprintInput;
@@ -14,19 +15,9 @@ interface UseCarbonInsightsOptions {
 interface UseCarbonInsightsResult {
   loading: boolean;
   error: string | null;
+  refreshInsights: () => void;
 }
 
-/**
- * Handles fetching personalised AI reduction recommendations.
- *
- * Responsibilities:
- *  - Fires the POST /api/insights request when `totalFootprint > 0` and no cached
- *    insights exist yet.
- *  - Manages loading and error UI states.
- *  - Delegates the cached-insights state write back to the caller via `onSuccess`.
- *
- * The consuming page component is therefore responsible only for rendering.
- */
 export function useCarbonInsights({
   inputs,
   totalFootprint,
@@ -35,14 +26,25 @@ export function useCarbonInsights({
 }: UseCarbonInsightsOptions): UseCarbonInsightsResult {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshRequested, setRefreshRequested] = useState(false);
+  const hasFetchedRef = useRef(false);
+
+  const refreshInsights = useCallback(() => {
+    hasFetchedRef.current = false;
+    setRefreshRequested(true);
+  }, []);
 
   useEffect(() => {
-    // Do not fire if there is no data or if we already have cached results
-    if (totalFootprint === 0 || existingInsights) return;
+    if (totalFootprint === 0) return;
+
+    const shouldFetch = refreshRequested || (!existingInsights && !hasFetchedRef.current);
+    if (!shouldFetch) return;
 
     const fetchRecommendations = async () => {
       setLoading(true);
       setError(null);
+      setRefreshRequested(false);
+
       try {
         const res = await fetch('/api/insights', {
           method: 'POST',
@@ -55,9 +57,12 @@ export function useCarbonInsights({
         }
 
         const data: InsightsResponse = await res.json();
+        hasFetchedRef.current = true;
         onSuccess(data);
       } catch (err) {
-        console.error(err);
+        logger.error('Failed to fetch carbon insights', {
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
         setError(
           'Could not process reduction recommendations. Verify your API deployment setup.'
         );
@@ -68,7 +73,7 @@ export function useCarbonInsights({
 
     fetchRecommendations();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalFootprint, existingInsights]);
+  }, [totalFootprint, existingInsights, refreshRequested]);
 
-  return { loading, error };
+  return { loading, error, refreshInsights };
 }

@@ -3,7 +3,7 @@
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
 import { Input } from '@/components/ui/Input';
-import { parseNumericInput } from '@/lib/input-utils';
+import { createFieldChangeHandler } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['waste'];
@@ -11,10 +11,6 @@ interface StepProps {
 }
 
 export const WasteStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleChange = (field: keyof FootprintInput['waste']) => (value: string) => {
-    onChange({ ...data, [field]: parseNumericInput(value) });
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -29,7 +25,9 @@ export const WasteStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.wasteKgPerWeek || ''}
-          onChange={(e) => handleChange('wasteKgPerWeek')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('wasteKgPerWeek', data, onChange)(e.target.value)}
+          helperText="Estimate total household waste output weekly."
+          helperId="waste-mass-help"
         />
         <Input
           id="recycleRate"
@@ -38,7 +36,9 @@ export const WasteStep: React.FC<StepProps> = ({ data, onChange }) => {
           min="0"
           max="100"
           value={data.recyclePercentage || ''}
-          onChange={(e) => handleChange('recyclePercentage')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('recyclePercentage', data, onChange)(e.target.value)}
+          helperText="Percentage of waste diverted to recycling programs."
+          helperId="waste-recycle-help"
         />
       </div>
     </div>

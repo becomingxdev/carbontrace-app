@@ -3,7 +3,7 @@
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
 import { Input } from '@/components/ui/Input';
-import { parseNumericInput } from '@/lib/input-utils';
+import { createFieldChangeHandler } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['shopping'];
@@ -11,10 +11,6 @@ interface StepProps {
 }
 
 export const ShoppingStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleChange = (field: keyof FootprintInput['shopping']) => (value: string) => {
-    onChange({ ...data, [field]: parseNumericInput(value) });
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -29,7 +25,9 @@ export const ShoppingStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.clothesItemsPerMonth || ''}
-          onChange={(e) => handleChange('clothesItemsPerMonth')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('clothesItemsPerMonth', data, onChange)(e.target.value)}
+          helperText="Count newly purchased clothing items each month."
+          helperId="shopping-clothes-help"
         />
         <Input
           id="electronics"
@@ -37,7 +35,9 @@ export const ShoppingStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.electronicsItemsPerYear || ''}
-          onChange={(e) => handleChange('electronicsItemsPerYear')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('electronicsItemsPerYear', data, onChange)(e.target.value)}
+          helperText="Include phones, laptops, and other new devices."
+          helperId="shopping-electronics-help"
         />
       </div>
     </div>

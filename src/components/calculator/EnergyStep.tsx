@@ -3,7 +3,7 @@
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
 import { Input } from '@/components/ui/Input';
-import { parseNumericInput } from '@/lib/input-utils';
+import { createFieldChangeHandler } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['energy'];
@@ -11,10 +11,6 @@ interface StepProps {
 }
 
 export const EnergyStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleChange = (field: keyof FootprintInput['energy']) => (value: string) => {
-    onChange({ ...data, [field]: parseNumericInput(value) });
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -29,7 +25,9 @@ export const EnergyStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.electricityKwhPerMonth || ''}
-          onChange={(e) => handleChange('electricityKwhPerMonth')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('electricityKwhPerMonth', data, onChange)(e.target.value)}
+          helperText="Check your utility bill for monthly kWh usage."
+          helperId="energy-electricity-help"
         />
         <Input
           id="naturalGas"
@@ -37,7 +35,9 @@ export const EnergyStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.naturalGasM3PerMonth || ''}
-          onChange={(e) => handleChange('naturalGasM3PerMonth')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('naturalGasM3PerMonth', data, onChange)(e.target.value)}
+          helperText="Enter average monthly natural gas consumption."
+          helperId="energy-gas-help"
         />
         <Input
           id="lpg"
@@ -45,7 +45,9 @@ export const EnergyStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.lpgKgPerMonth || ''}
-          onChange={(e) => handleChange('lpgKgPerMonth')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('lpgKgPerMonth', data, onChange)(e.target.value)}
+          helperText="Include household LPG cylinder usage per month."
+          helperId="energy-lpg-help"
         />
       </div>
     </div>

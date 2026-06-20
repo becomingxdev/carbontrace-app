@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { FootprintSchema } from '@/validators/footprint.schema';
+import { InsightsResponseSchema } from '@/validators/insights.schema';
 import { calculateTotalFootprint } from '@/lib/carbon-calculator';
+import { parseAIResponse } from '@/lib/parse-ai-response';
+import { getFallbackInsights } from '@/lib/fallback-insights';
+import { withRetry, RetryableError } from '@/lib/retry';
+import { logger } from '@/lib/logger';
 import type { InsightsResponse } from '@/types/insights';
 
-// ---------------------------------------------------------------------------
-// Rate limiting — in-memory, per-IP, 10 req/min
-// ---------------------------------------------------------------------------
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
 
@@ -17,14 +19,9 @@ interface RateLimitEntry {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-/**
- * Checks whether the given IP is within the allowed request window.
- * Also purges stale entries from the Map to prevent unbounded memory growth.
- */
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
 
-  // R8: Sweep expired entries to prevent indefinite Map growth
   for (const [key, entry] of rateLimitStore.entries()) {
     if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
       rateLimitStore.delete(key);
@@ -35,23 +32,17 @@ function checkRateLimit(ip: string): boolean {
 
   if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     rateLimitStore.set(ip, { count: 1, windowStart: now });
-    return true; // within limit
+    return true;
   }
 
   if (entry.count >= RATE_LIMIT_MAX) {
-    return false; // exceeded
+    return false;
   }
 
   entry.count += 1;
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Gemini 2.5 Flash via Google Gen AI SDK (Vertex AI backend)
-// Lazy-initialized inside the handler so Next.js build does not attempt
-// credential validation during static page collection.
-// On Cloud Run, ADC authenticates via the attached service account.
-// ---------------------------------------------------------------------------
 let _ai: GoogleGenAI | null = null;
 
 function getAIClient(): GoogleGenAI {
@@ -65,20 +56,68 @@ function getAIClient(): GoogleGenAI {
   return _ai;
 }
 
-// ---------------------------------------------------------------------------
-// Safe JSON extraction — strips markdown fences if present
-// ---------------------------------------------------------------------------
-function parseAIResponse(raw: string): InsightsResponse {
-  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const cleaned = fenceMatch ? fenceMatch[1].trim() : raw.trim();
-  return JSON.parse(cleaned) as InsightsResponse;
+function validateInsightsPayload(payload: unknown, calculations: ReturnType<typeof calculateTotalFootprint>): InsightsResponse {
+  const validationResult = InsightsResponseSchema.safeParse(payload);
+
+  if (validationResult.success) {
+    return validationResult.data;
+  }
+
+  logger.error('AI insights validation failed', {
+    issues: validationResult.error.issues,
+  });
+
+  return getFallbackInsights(calculations);
 }
 
-// ---------------------------------------------------------------------------
-// POST /api/insights
-// ---------------------------------------------------------------------------
+async function generateInsights(systemPrompt: string): Promise<string> {
+  return withRetry(async () => {
+    try {
+      const response = await getAIClient().models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        },
+      });
+
+      const responseText = response.text;
+      if (!responseText) {
+        throw new RetryableError('Gemini returned an empty response.', 500);
+      }
+
+      return responseText;
+    } catch (error) {
+      if (isRetryableStatus(error)) {
+        throw new RetryableError(
+          error instanceof Error ? error.message : 'Retryable Gemini API error',
+          extractStatus(error)
+        );
+      }
+      throw error;
+    }
+  }, { maxRetries: 3, baseDelayMs: 1000 });
+}
+
+function isRetryableStatus(error: unknown): boolean {
+  const status = extractStatus(error);
+  return status === 429 || (status !== undefined && status >= 500);
+}
+
+function extractStatus(error: unknown): number | undefined {
+  if (typeof error === 'object' && error !== null) {
+    if ('status' in error && typeof (error as { status: unknown }).status === 'number') {
+      return (error as { status: number }).status;
+    }
+    if ('statusCode' in error && typeof (error as { statusCode: unknown }).statusCode === 'number') {
+      return (error as { statusCode: number }).statusCode;
+    }
+  }
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
-  // 1. Rate limiting
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
@@ -89,7 +128,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 2. Validate input payload with Zod
     const body: unknown = await req.json();
     const validationResult = FootprintSchema.safeParse(body);
 
@@ -103,7 +141,6 @@ export async function POST(req: NextRequest) {
     const userData = validationResult.data;
     const calculations = calculateTotalFootprint(userData);
 
-    // 3. Context-injection prompt — user's exact numbers, not generic advice
     const systemPrompt = `You are an elite carbon footprint reduction advisor.
 The user's annual carbon footprint is calculated at ${calculations.total} kg CO2e, broken down categorically as:
 - Transport: ${calculations.breakdown.transport} kg CO2e
@@ -123,28 +160,15 @@ You must return your response inside a valid JSON object matching this structure
   ]
 }`;
 
-    // 4. Call Gemini 2.5 Flash
-    const response = await getAIClient().models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.2,
-      },
-    });
+    const responseText = await generateInsights(systemPrompt);
+    const parsedPayload = parseAIResponse(responseText);
+    const structuredData = validateInsightsPayload(parsedPayload, calculations);
 
-    const responseText = response.text;
-
-    if (!responseText) {
-      throw new Error('Gemini returned an empty response.');
-    }
-
-    // 5. Safe JSON parse with typed return (R9)
-    const structuredData: InsightsResponse = parseAIResponse(responseText);
     return NextResponse.json(structuredData);
-
   } catch (error) {
-    console.error('Gemini API Error:', error);
+    logger.error('Gemini API Error', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
     return NextResponse.json(
       { error: 'Internal system engine processing failure.' },
       { status: 500 }

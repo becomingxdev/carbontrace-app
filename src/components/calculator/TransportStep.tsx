@@ -3,7 +3,7 @@
 import React from 'react';
 import { FootprintInput } from '@/validators/footprint.schema';
 import { Input } from '@/components/ui/Input';
-import { parseNumericInput } from '@/lib/input-utils';
+import { createFieldChangeHandler } from '@/lib/input-utils';
 
 interface StepProps {
   data: FootprintInput['transport'];
@@ -11,10 +11,6 @@ interface StepProps {
 }
 
 export const TransportStep: React.FC<StepProps> = ({ data, onChange }) => {
-  const handleChange = (field: keyof FootprintInput['transport']) => (value: string) => {
-    onChange({ ...data, [field]: parseNumericInput(value) });
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -29,7 +25,9 @@ export const TransportStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.carKmPerWeek || ''}
-          onChange={(e) => handleChange('carKmPerWeek')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('carKmPerWeek', data, onChange)(e.target.value)}
+          helperText="Include all personal car trips per week."
+          helperId="transport-car-help"
         />
         <Input
           id="busKm"
@@ -37,7 +35,9 @@ export const TransportStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.busKmPerWeek || ''}
-          onChange={(e) => handleChange('busKmPerWeek')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('busKmPerWeek', data, onChange)(e.target.value)}
+          helperText="Estimate total bus distance traveled weekly."
+          helperId="transport-bus-help"
         />
         <Input
           id="trainKm"
@@ -45,7 +45,9 @@ export const TransportStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.trainKmPerWeek || ''}
-          onChange={(e) => handleChange('trainKmPerWeek')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('trainKmPerWeek', data, onChange)(e.target.value)}
+          helperText="Include commuter and long-distance rail travel."
+          helperId="transport-train-help"
         />
         <Input
           id="flights"
@@ -53,7 +55,9 @@ export const TransportStep: React.FC<StepProps> = ({ data, onChange }) => {
           type="number"
           min="0"
           value={data.flightHoursPerYear || ''}
-          onChange={(e) => handleChange('flightHoursPerYear')(e.target.value)}
+          onChange={(e) => createFieldChangeHandler('flightHoursPerYear', data, onChange)(e.target.value)}
+          helperText="Total hours spent in the air each year."
+          helperId="transport-flight-help"
         />
       </div>
     </div>

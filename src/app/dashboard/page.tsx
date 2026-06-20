@@ -1,17 +1,35 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FootprintProviderWrapper } from '@/components/providers/FootprintProviderWrapper';
 import { useFootprint } from '@/context/FootprintContext';
 import { Button } from '@/components/ui/Button';
 import { CarbonScoreCard } from '@/components/dashboard/CarbonScoreCard';
-import { CategoryDonutChart } from '@/components/dashboard/CategoryDonutChart';
-import { ComparisonBarChart } from '@/components/dashboard/ComparisonBarChart';
+import { FootprintHistorySection } from '@/components/dashboard/FootprintHistorySection';
+import { CarbonGoalSection } from '@/components/dashboard/CarbonGoalSection';
 
-export default function DashboardPage() {
+const CategoryDonutChart = dynamic(
+  () => import('@/components/dashboard/CategoryDonutChart').then((mod) => mod.CategoryDonutChart),
+  {
+    ssr: false,
+    loading: () => <div className="bg-slate-900/60 border border-slate-800 rounded-xl h-[350px] animate-pulse" aria-hidden="true" />,
+  }
+);
+
+const ComparisonBarChart = dynamic(
+  () => import('@/components/dashboard/ComparisonBarChart').then((mod) => mod.ComparisonBarChart),
+  {
+    ssr: false,
+    loading: () => <div className="bg-slate-900/60 border border-slate-800 rounded-xl h-[350px] animate-pulse" aria-hidden="true" />,
+  }
+);
+
+function DashboardContent() {
   const router = useRouter();
-  const { calculations } = useFootprint();
+  const { calculations, history, carbonGoal, setCarbonGoal } = useFootprint();
 
   const hasCalculated = calculations.total > 0;
 
@@ -21,7 +39,6 @@ export default function DashboardPage() {
 
   return (
     <div className="py-10 px-4 max-w-6xl mx-auto flex-grow w-full space-y-8">
-      {/* Dashboard Top Header Actions Row */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">Your Carbon Footprint Dashboard</h1>
@@ -30,7 +47,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Link href="/calculator">
+          <Link href="/calculator" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-lg">
             <Button variant="outline">Recalculate</Button>
           </Link>
           <Button 
@@ -44,32 +61,46 @@ export default function DashboardPage() {
       </div>
 
       {!hasCalculated ? (
-        /* Empty State Blueprint Fallback */
         <div className="text-center py-20 bg-slate-900/40 border border-dashed border-slate-800 rounded-xl max-w-xl mx-auto space-y-4">
-          <div className="text-3xl">🌱</div>
+          <div className="text-3xl" aria-hidden="true">🌱</div>
           <h2 className="text-xl font-bold text-slate-200">No Footprint Logged</h2>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
             Please run through our 5-step interactive questionnaire layout to generate localized calculation profiles.
           </p>
-          <Link href="/calculator" className="inline-block mt-2">
+          <Link href="/calculator" className="inline-block mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-lg">
             <Button variant="primary">Start Form Wizard</Button>
           </Link>
         </div>
       ) : (
-        /* Main Reactive Visualization Layout Grid */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Column One: Key Score Metrics */}
-          <div className="lg:col-span-1 flex flex-col h-full">
-            <CarbonScoreCard total={calculations.total} />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 flex flex-col h-full">
+              <CarbonScoreCard total={calculations.total} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:col-span-2">
+              <CategoryDonutChart breakdown={calculations.breakdown} />
+              <ComparisonBarChart total={calculations.total} />
+            </div>
           </div>
 
-          {/* Column Two & Three: Analytical Graphs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:col-span-2">
-            <CategoryDonutChart breakdown={calculations.breakdown} />
-            <ComparisonBarChart total={calculations.total} />
-          </div>
+          <CarbonGoalSection
+            currentKg={calculations.total}
+            goal={carbonGoal}
+            onSaveGoal={setCarbonGoal}
+          />
+
+          <FootprintHistorySection history={history} />
         </div>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <FootprintProviderWrapper>
+      <DashboardContent />
+    </FootprintProviderWrapper>
   );
 }
