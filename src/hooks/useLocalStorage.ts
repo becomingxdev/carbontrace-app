@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 /**
  * Generic hook that syncs a piece of React state with a localStorage key.
@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react';
 export function useLocalStorage<T>(
   key: string,
   initialValue: T
-): [T, (value: T | null) => void] {
+): [T, (value: T | null | ((val: T) => T | null)) => void] {
   const [storedValue, setStoredValue] = useState<T>(initialValue);
 
   // Hydrate from localStorage on client mount only
@@ -28,19 +28,34 @@ export function useLocalStorage<T>(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  const setValue = (value: T | null) => {
-    try {
-      if (value === null) {
-        localStorage.removeItem(key);
-        setStoredValue(initialValue);
-      } else {
-        setStoredValue(value);
-        localStorage.setItem(key, JSON.stringify(value));
+  const setValue = useCallback((value: T | null | ((val: T) => T | null)) => {
+    setStoredValue((prev) => {
+      let valueToStore: T | null;
+
+      try {
+        valueToStore = value instanceof Function ? value(prev) : value;
+      } catch {
+        return prev;
       }
-    } catch {
-      // Silently ignore write errors (e.g., private browsing quota)
-    }
-  };
+
+      if (valueToStore === null) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          return prev;
+        }
+        return initialValue;
+      }
+
+      try {
+        localStorage.setItem(key, JSON.stringify(valueToStore));
+      } catch {
+        // Silently ignore write errors (e.g., private browsing quota)
+      }
+
+      return valueToStore;
+    });
+  }, [key, initialValue]);
 
   return [storedValue, setValue];
 }

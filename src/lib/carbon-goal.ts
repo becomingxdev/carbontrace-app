@@ -43,11 +43,7 @@ export function saveCarbonGoal(goal: CarbonGoal | null): void {
 export function calculateGoalProgress(currentKg: number, goal: CarbonGoal): GoalProgress {
   const targetKg = Math.max(0, goal.targetKg);
   const gapRemainingKg = Math.max(0, currentKg - targetKg);
-  const progressPercent =
-    currentKg <= 0 ? 100 : Math.min(100, Math.round(((currentKg - gapRemainingKg) / currentKg) * 100));
-
-  const targetTime = new Date(goal.targetDate).getTime();
-  const isOnTrack = Number.isNaN(targetTime) ? currentKg <= targetKg : currentKg <= targetKg;
+  const isOnTrack = currentKg <= targetKg;
 
   return {
     currentKg,

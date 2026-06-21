@@ -78,3 +78,5 @@ yarn-error.log*
 *.sw?
 
 deploy.ps1
+
+.continueignore

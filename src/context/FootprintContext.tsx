@@ -12,9 +12,7 @@ import {
   appendHistoryEntry,
   createHistoryEntry,
   loadFootprintHistory,
-  saveFootprintHistory,
 } from '../lib/footprint-history';
-import { loadCarbonGoal, saveCarbonGoal } from '../lib/carbon-goal';
 
 const defaultInput: FootprintInput = {
   transport: { carKmPerWeek: 0, busKmPerWeek: 0, trainKmPerWeek: 0, flightHoursPerYear: 0 },
@@ -49,29 +47,31 @@ export function FootprintProvider({ children }: { children: React.ReactNode }) {
   const [history, setHistoryStored] = useLocalStorage<FootprintHistoryEntry[]>(STORAGE_KEYS.history, []);
   const [carbonGoal, setCarbonGoalStored] = useLocalStorage<CarbonGoal | null>(STORAGE_KEYS.goal, null);
 
-  const updateCategory = <K extends keyof FootprintInput>(category: K, data: FootprintInput[K]) => {
-    setInputs({ ...inputs, [category]: data });
-  };
+  const updateCategory = useCallback(<K extends keyof FootprintInput>(category: K, data: FootprintInput[K]) => {
+    setInputs(prev => ({
+      ...prev,
+      [category]: data,
+    }));
+  }, [setInputs]);
 
-  const setAiInsights = (insights: InsightsResponse) => {
+  const setAiInsights = useCallback((insights: InsightsResponse) => {
     setAiInsightsStored(insights);
-  };
+  }, [setAiInsightsStored]);
 
-  const clearAiInsights = () => {
+  const clearAiInsights = useCallback(() => {
     setAiInsightsStored(null);
-  };
+  }, [setAiInsightsStored]);
 
-  const toggleActionCommit = (actionName: string) => {
+  const toggleActionCommit = useCallback((actionName: string) => {
     const updated = committedActions.includes(actionName)
       ? committedActions.filter((a) => a !== actionName)
       : [...committedActions, actionName];
     setCommittedActionsStored(updated);
-  };
+  }, [committedActions, setCommittedActionsStored]);
 
-  const setCarbonGoal = (goal: CarbonGoal | null) => {
+  const setCarbonGoal = useCallback((goal: CarbonGoal | null) => {
     setCarbonGoalStored(goal);
-    saveCarbonGoal(goal);
-  };
+  }, [setCarbonGoalStored]);
 
   const recordCalculation = useCallback(() => {
     const calculations = calculateTotalFootprint(inputs);
@@ -81,37 +81,50 @@ export function FootprintProvider({ children }: { children: React.ReactNode }) {
     const existingHistory = history.length > 0 ? history : loadFootprintHistory();
     const updatedHistory = appendHistoryEntry(existingHistory, entry);
     setHistoryStored(updatedHistory);
-    saveFootprintHistory(updatedHistory);
   }, [history, inputs, setHistoryStored]);
 
-  const clearAllData = () => {
+  const clearAllData = useCallback(() => {
     setInputs(null);
     setAiInsightsStored(null);
     setCommittedActionsStored(null);
     setHistoryStored(null);
     setCarbonGoalStored(null);
-    saveCarbonGoal(null);
-    saveFootprintHistory([]);
-  };
+  }, [setInputs, setAiInsightsStored, setCommittedActionsStored, setHistoryStored, setCarbonGoalStored]);
 
   const calculations = useMemo(() => calculateTotalFootprint(inputs), [inputs]);
 
+  const contextValue = useMemo(() => ({
+    inputs,
+    updateCategory,
+    calculations,
+    aiInsights,
+    setAiInsights,
+    clearAiInsights,
+    committedActions,
+    toggleActionCommit,
+    history,
+    recordCalculation,
+    carbonGoal,
+    setCarbonGoal,
+    clearAllData
+  }), [
+    inputs,
+    updateCategory,
+    calculations,
+    aiInsights,
+    setAiInsights,
+    clearAiInsights,
+    committedActions,
+    toggleActionCommit,
+    history,
+    recordCalculation,
+    carbonGoal,
+    setCarbonGoal,
+    clearAllData
+  ]);
+
   return (
-    <FootprintContext.Provider value={{
-      inputs,
-      updateCategory,
-      calculations,
-      aiInsights,
-      setAiInsights,
-      clearAiInsights,
-      committedActions,
-      toggleActionCommit,
-      history,
-      recordCalculation,
-      carbonGoal,
-      setCarbonGoal,
-      clearAllData
-    }}>
+    <FootprintContext.Provider value={contextValue}>
       {children}
     </FootprintContext.Provider>
   );

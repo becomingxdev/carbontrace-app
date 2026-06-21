@@ -23,7 +23,7 @@ describe('useCarbonInsights', () => {
   };
 
   const mockSuccessData = {
-    recommendations: [{ action: 'Do something', co2Saved: 100, difficulty: 'Easy' }],
+    recommendations: [{ action: 'Do something', co2Saved: 100, difficulty: 'Easy' as const }],
   };
 
   const originalFetch = global.fetch;
